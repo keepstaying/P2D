@@ -9,10 +9,10 @@ import "../VicProposal.sol";
 interface IVicProposal {
     function createProposal(
         uint256 _duration,
-        uint256 _requiredBid,
         address _nftAddress,
         uint256 _nftId,
-        uint256 _price
+        uint256 _price,
+        uint256 _repaytime
     ) external returns (uint256);
 
     function vote(uint256 _proposalId, VicProposal.VoteType _voteType) external;

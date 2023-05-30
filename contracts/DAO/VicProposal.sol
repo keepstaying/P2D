@@ -16,17 +16,17 @@ contract VicProposal {
     }
 
     struct Proposal {
-        address creator;
-        address nftAddress;
-        uint256 nftId;
-        uint256 price;
-        uint256 startTime;
-        uint256 endTime;
-        uint256 totalAgreeVotes;
-        uint256 totalDisagreeVotes;
-        uint256 requiredBid;
-        address[] votes;
-        ProposalStatus status;
+        address creator; //提案创建者也就是NFT拥有者
+        address nftAddress; //NFT地址
+        uint256 nftId; //NFTID
+        uint256 price; //预期的价格
+        uint256 startTime; //提案开始时间
+        uint256 endTime; //提案结束时间
+        uint256 totalAgreeVotes; //所有同意的票数
+        uint256 totalDisagreeVotes; //所有拒绝的票数
+        address[] votes; //所有的投票数
+        uint256 repayTime; //需要偿还的时间
+        ProposalStatus status; //提案状态
     }
 
     uint256 public constant MAX_VOTE_PERCENTAGE = 51; // 最大投票比例为 51%
@@ -45,8 +45,7 @@ contract VicProposal {
         address creator,
         uint256 price,
         uint256 startTime,
-        uint256 endTime,
-        uint256 requiredBid
+        uint256 endTime
     );
     event ProposalApproved(uint256 proposalId);
     event ProposalRejected(uint256 proposalId);
@@ -57,10 +56,10 @@ contract VicProposal {
 
     function createProposal(
         uint256 _duration,
-        uint256 _requiredBid,
         address _nftAddress,
         uint256 _nftId,
-        uint256 _price
+        uint256 _price,
+        uint256 _repayTime
     ) public returns (uint256) {
         require(
             _duration >= MIN_VOTE_DURATION,
@@ -70,7 +69,7 @@ contract VicProposal {
             _duration <= MAX_VOTE_DURATION,
             "Vote duration exceeds the maximum"
         );
-        require(_requiredBid > 0, "Required bid must be greater than 0");
+        require(_price > 0, "Required price must be greater than 0");
 
         IERC20 nft = IERC20(_nftAddress);
 
@@ -87,8 +86,8 @@ contract VicProposal {
             nftId: _nftId,
             totalDisagreeVotes: 0,
             totalAgreeVotes: 0,
-            votes: new address[](10), // 假设最多只有 10 个投票
-            requiredBid: _requiredBid,
+            votes: new address[](10), // 假设最多只有 10 个投票,
+            repayTime: _repayTime,
             status: ProposalStatus.Open
         });
 
@@ -99,19 +98,13 @@ contract VicProposal {
             msg.sender,
             _price,
             block.timestamp,
-            proposal.endTime,
-            _requiredBid
+            proposal.endTime
         );
 
         return proposalId;
     }
 
-    enum VoteType {
-        Agree,
-        Disagree
-    }
-
-    function vote(uint256 _proposalId, VoteType _voteType) public {
+    function vote(uint256 _proposalId, bool voteType) public {
         Proposal storage proposal = proposals[_proposalId];
 
         require(
@@ -122,9 +115,9 @@ contract VicProposal {
 
         hasVoted[msg.sender] = true;
 
-        if (_voteType == VoteType.Agree) {
+        if (voteType == true) {
             proposal.totalAgreeVotes += 1;
-        } else if (_voteType == VoteType.Disagree) {
+        } else if (voteType == false) {
             proposal.totalDisagreeVotes += 1;
         }
 
@@ -153,6 +146,8 @@ contract VicProposal {
     }
 
     function repay(uint256 _proposalId) public {
+        uint256 proposalRepayTime = proposals[_proposalId].repayTime;
+        require(proposalRepayTime >= block.timestamp);
         uint256 repayPrice = proposals[_proposalId].price;
         address nftAddress = proposals[_proposalId].nftAddress;
         require(token.balanceOf(msg.sender) >= repayPrice);

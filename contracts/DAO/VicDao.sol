@@ -65,8 +65,9 @@ contract VicDAO {
             member.status = 1;
             emit MemberApproved(msg.sender);
         }
+        uint256 amount = _amount * (_unlockTime-block.timestamp);
 
-        member.pledgeAmount += _amount;
+        member.pledgeAmount += amount;
         member.pledgeStartTime = block.timestamp;
         member.pledgeUnlockTime = _unlockTime;
 
@@ -127,12 +128,10 @@ contract VicDAO {
         emit MemberRemoved(_member);
     }
 
-    function daoMemberVote(
-        uint256 _proposalId,
-        VicProposal.VoteType _result
-    ) public {
+    function daoMemberVote(uint256 _proposalId, bool _voteType) public {
         uint8 memberType = members[msg.sender].status;
         require(memberType == 1 || memberType == 2);
-        proposal.vote(_proposalId, _result);
+        require(memberBalanceOf(msg.sender)>0;)
+        proposal.vote(_proposalId, _voteType);
     }
 }
