@@ -3,10 +3,12 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
 
 import "./VicToken.sol";
 
-contract VicProposal {
+contract VicProposal is Ownable {
     using SafeMath for uint256;
 
     enum ProposalStatus {
@@ -37,8 +39,10 @@ contract VicProposal {
     VicToken public token;
 
     Proposal[] public proposals;
+    
+    address public DAO;
 
-    mapping(address => bool) public hasVoted;
+    mapping(address =>mapping(uint256=>bool)) public hasVoted;
 
     event ProposalCreated(
         uint256 proposalId,
@@ -52,6 +56,15 @@ contract VicProposal {
 
     constructor(address _token) {
         token = VicToken(_token);
+    }
+
+    modifier onlyDao{
+        require(msg.sender == DAO);
+        _;
+    }
+
+    function setDaoAddress(address _dao) public onlyOwner{
+        DAO = _dao;
     }
 
     function createProposal(
@@ -70,10 +83,11 @@ contract VicProposal {
             "Vote duration exceeds the maximum"
         );
         require(_price > 0, "Required price must be greater than 0");
+        require(_repayTime >= block.timestamp,"repayTime must bigger than blockTime");
 
-        IERC20 nft = IERC20(_nftAddress);
+        IERC721 nft = IERC721(_nftAddress);
 
-        nft.transfer(address(this), _nftId);
+        nft.transferFrom(msg.sender,address(this), _nftId);
 
         uint256 proposalId = proposals.length;
 
@@ -104,16 +118,16 @@ contract VicProposal {
         return proposalId;
     }
 
-    function vote(uint256 _proposalId, bool voteType) public {
+    function vote(address voter,uint256 _proposalId, bool voteType) onlyDao public {
         Proposal storage proposal = proposals[_proposalId];
 
         require(
             proposal.status == ProposalStatus.Open,
             "The proposal is not open for voting"
         );
-        require(!hasVoted[msg.sender], "The voter had voted in this proposal");
+        require(!hasVoted[voter][_proposalId], "The voter had voted in this proposal");
 
-        hasVoted[msg.sender] = true;
+        hasVoted[voter][_proposalId] = true;
 
         if (voteType == true) {
             proposal.totalAgreeVotes += 1;
@@ -121,18 +135,19 @@ contract VicProposal {
             proposal.totalDisagreeVotes += 1;
         }
 
-        proposal.votes.push(msg.sender);
+        proposal.votes.push(voter);
 
         uint256 totalVotes = proposal.totalAgreeVotes +
             proposal.totalDisagreeVotes;
 
         address lender = proposals[_proposalId].creator;
         uint256 price = proposals[_proposalId].price;
+        uint256 afterPrice = price.mul(3).div(1000);
 
         if (block.timestamp >= proposal.endTime || totalVotes == 10) {
             if (proposal.totalDisagreeVotes < proposal.totalAgreeVotes) {
                 proposal.status = ProposalStatus.Approved;
-                token.transfer(lender, price);
+                token.transfer(lender, afterPrice);
                 emit ProposalApproved(_proposalId);
             } else {
                 proposal.status = ProposalStatus.Rejected;
@@ -141,8 +156,8 @@ contract VicProposal {
         }
     }
 
-    function clearHasVoted() public {
-        delete hasVoted[msg.sender];
+    function clearHasVoted(uint256 _proposalId) public {
+        delete hasVoted[msg.sender][_proposalId];
     }
 
     function repay(uint256 _proposalId) public {
@@ -153,10 +168,14 @@ contract VicProposal {
         require(token.balanceOf(msg.sender) >= repayPrice);
 
         token.transfer(address(this), repayPrice);
-
+ 
         IERC721 nft = IERC721(nftAddress);
         uint256 tokenId = proposals[_proposalId].nftId;
         nft.approve(address(this), tokenId);
         nft.transferFrom(address(this), msg.sender, tokenId);
+    }
+
+    function getProposalsLength() public view returns(uint256){
+        return proposals.length;
     }
 }
