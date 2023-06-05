@@ -16,10 +16,9 @@ contract VicDAO {
     VicProposal public proposal;
 
     struct Member {
-        uint8 status; // 0=非成员，1=普通成员，2=管理员
-        uint256 pledgeAmount;
-        uint256 pledgeStartTime;
-        uint256 pledgeUnlockTime;
+        uint8 status;           // 0=非成员，1=普通成员，2=管理员
+        uint256 lastBalance;    // 上一次的余额数量  
+        uint256 updateTime;     // 上次余额更新的时间 用于计算出 距离上一次更新余额期间 燃烧了多少代币
     }
 
     struct Receipt {
@@ -30,9 +29,8 @@ contract VicDAO {
     }
 
     mapping(address => Member) public members;
-    mapping(address => uint256) public vevicBalance;
-    mapping(address => uint256) public vevicUpdateTime;
     mapping(address => Receipt[]) public receiptTable;
+    
 
     event MemberPledged(address member, uint256 amount, uint256 unlockTime);
     event MemberUnlocked(address member, uint256 amount);
@@ -67,9 +65,7 @@ contract VicDAO {
         }
         uint256 amount = _amount * (_unlockTime - block.timestamp);
 
-        member.pledgeAmount += amount;
-        member.pledgeStartTime = block.timestamp;
-        member.pledgeUnlockTime = _unlockTime;
+        addAmount(msg.sender,amount);
 
         token.transferFrom(msg.sender, address(this), _amount);
 
@@ -85,6 +81,11 @@ contract VicDAO {
         receiptTable[msg.sender].push(receipt);
     }
 
+    function addAmount(address _member ,uint256 _amount) private {
+        members[_member].lastBalance=memberBalanceOf(_member)+_amount;
+        members[_member].updateTime=block.timestamp;
+    }
+
     function unlock(uint256 _index) public {
         Receipt storage receipt = receiptTable[msg.sender][_index];
         require(
@@ -92,11 +93,9 @@ contract VicDAO {
             "The receipt can't be unlocked yet"
         );
 
-        memberBalanceOf(msg.sender); // 更新余额
-
         receipt.processed = false;
 
-        vevicBalance[msg.sender] -= receipt.amount;
+        
         token.transfer(msg.sender, receipt.amount);
 
         emit MemberUnlocked(msg.sender, receipt.amount);
@@ -104,18 +103,15 @@ contract VicDAO {
 
     function memberBalanceOf(address _member) public view returns (uint256) {
         Member memory member = members[_member];
-        if (member.pledgeAmount == 0) {
+        if (member.updateTime == 0) {
             return 0;
         }
-        uint256 burnAmount = (block.timestamp - member.pledgeStartTime)
-            .mul(member.pledgeAmount)
-            .mul(BURN_RATE)
-            .div(365 days)
-            .div(100);
-        if (member.pledgeAmount <= burnAmount) {
+        uint256 burnAmount=(block.timestamp-member.updateTime)
+            .mul(BURN_RATE);
+        if (member.lastBalance <= burnAmount) {
             return 0;
         }
-        uint256 balance = member.pledgeAmount - burnAmount;
+        uint256 balance = member.lastBalance - burnAmount;
         return balance;
     }
 
