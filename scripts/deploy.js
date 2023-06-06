@@ -35,7 +35,11 @@ async function deploy() {
 
     console.log("VicDao address:", VicDao.address);
 
-    console.log("给部署者地址铸造代币")                                      
+    const Swap = await ethers.getContractFactory("uniswap");
+    const VicSwap = await Swap.deploy(VicToken.address);
+    console.log("Swap address:", VicSwap.address);
+
+    console.log("给部署者地址铸造代币")
     await VicToken.mint(deployer.address, 100000);
     const tokenBalance = await VicToken.balanceOf(deployer.address);
     console.log("成功铸造:" + ethers.utils.formatUnits(tokenBalance, 0));
